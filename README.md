@@ -46,6 +46,10 @@ src/
 
 ## Setup
 
+## Simple install 
+
+Upload HermesPlugin.zip to the plugin area of UISP CRM and add your twilio info your done.
+
 ### 1. Install dependencies
 
 From inside the `src/` directory:
