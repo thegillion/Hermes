@@ -1,0 +1,70 @@
+{
+    "version": "1",
+    "information": {
+        "name": "hermes",
+        "displayName": "Hermes",
+        "description": "Send and receive SMS messages with clients via Twilio, directly from UISP.",
+        "url": "",
+        "version": "1.0.8",
+        "unmsVersionCompliancy": {
+            "min": "2.1.0",
+            "max": null
+        },
+        "author": "Kentucky Fi"
+    },
+    "configuration": [
+        {
+            "key": "twilioAccountSid",
+            "label": "Twilio Account SID",
+            "description": "Found on your Twilio Console dashboard.",
+            "required": true
+        },
+        {
+            "key": "twilioAuthToken",
+            "label": "Twilio Auth Token",
+            "description": "Found on your Twilio Console dashboard. Keep this secret.",
+            "required": true
+        },
+        {
+            "key": "twilioFromNumber",
+            "label": "Twilio From Number",
+            "description": "Your Twilio phone number in E.164 format, e.g. +15551234567",
+            "required": true
+        },
+		 {
+		  "key": "app_dashboard_widget_location",
+		  "label": "Dashboard Widget Location",
+		  "description": "Please select desired Dashboard Widget location.",
+		  "required": 1
+		},
+		{
+		  "key": "app_client_widget_location",
+		  "label": "Client Overview Widget Location",
+		  "description": "Please select desired Client Overview Widget Location.",
+		  "required": 1
+		}
+    ],
+    "menu": [
+        {
+            "label": "Hermes",
+            "type": "admin",
+            "target": "iframe"
+        }
+    ],
+    "widgets": [
+        {
+            "position": "dashboard",
+            "iframeHeight": 500,
+            "iframeUrlParameters": {
+                "page": "adminwidget"
+            }
+        },
+        {
+            "position": "client/overview",
+            "iframeHeight": 500,
+            "iframeUrlParameters": {
+                "page": "clientwidget"
+            }
+        }
+    ]
+}
