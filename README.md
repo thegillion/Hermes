@@ -130,8 +130,8 @@ Templates support `%%entity.field%%` placeholders pulled directly from the UISP 
 
 | Placeholder | Example output |
 |---|---|
-| `%%client.firstName%%` | John |
-| `%%client.lastName%%` | Smith |
+| `%%client.firstName%%` | John | -- Doesn't work with payment.add as UCRM does not pass it to plugin
+| `%%client.lastName%%` | Smith | -- Doesn't work with payment.add as UCRM does not pass it to plugin
 | `%%invoice.number%%` | 000042 |
 | `%%invoice.total%%` | 79.99 USD |
 | `%%invoice.dueDate%%` | May 16, 2026 |
@@ -146,7 +146,7 @@ Hi %%client.firstName%%, invoice #%%invoice.number%% for %%invoice.total%% is du
 
 | Placeholder | Example output |
 |---|---|
-| `%%client.firstName%%` | John |
+| `%%client.firstName%%` | John | -- Doesn't work with payment.add as UCRM does not pass it to plugin
 | `%%payment.amount%%` | 79.99 USD |
 | `%%payment.currencyCode%%` | USD |
 
