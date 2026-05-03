@@ -3,16 +3,22 @@
     "information": {
         "name": "hermes",
         "displayName": "Hermes",
-        "description": "Send and receive SMS messages with clients via Twilio, directly from UISP.",
+        "description": "Two-way SMS inbox and automated notifications via Twilio, directly from UISP.",
         "url": "",
-        "version": "1.0.8",
+        "version": "1.3.4",
         "unmsVersionCompliancy": {
             "min": "2.1.0",
             "max": null
         },
-        "author": "Kentucky Fi"
+        "author": "Your Name"
     },
     "configuration": [
+        {
+            "key": "publicUrl",
+            "label": "Public URL",
+            "description": "Your UISP public-facing domain, e.g. https://uisp.yourdomain.com \u2014 used to validate incoming Twilio webhook signatures. Leave blank on local/test installs (signature validation is automatically skipped for private/local IP addresses).",
+            "required": false
+        },
         {
             "key": "twilioAccountSid",
             "label": "Twilio Account SID",
@@ -31,22 +37,53 @@
             "description": "Your Twilio phone number in E.164 format, e.g. +15551234567",
             "required": true
         },
-		 {
-		  "key": "app_dashboard_widget_location",
-		  "label": "Dashboard Widget Location",
-		  "description": "Please select desired Dashboard Widget location.",
-		  "required": 1
-		},
-		{
-		  "key": "app_client_widget_location",
-		  "label": "Client Overview Widget Location",
-		  "description": "Please select desired Client Overview Widget Location.",
-		  "required": 1
-		}
+        {
+            "key": "event_invoice_add",
+            "label": "invoice.add \u2014 New Invoice",
+            "description": "SMS sent when a new invoice is created. Use %%invoice.number%%, %%invoice.total%%, %%invoice.currencyCode%%, %%invoice.dueDate%%, %%client.firstName%%, %%client.lastName%%. Leave blank to disable.",
+            "required": false
+        },
+        {
+            "key": "event_invoice_overdue",
+            "label": "invoice.overdue \u2014 Overdue Invoice",
+            "description": "SMS sent when an invoice becomes overdue. Same placeholders as above. Leave blank to disable.",
+            "required": false
+        },
+        {
+            "key": "event_invoice_near_due",
+            "label": "invoice.near_due \u2014 Invoice Near Due",
+            "description": "SMS sent when an invoice is nearing its due date. Leave blank to disable.",
+            "required": false
+        },
+        {
+            "key": "event_payment_add",
+            "label": "payment.add \u2014 Payment Received",
+            "description": "NOTE: %%client.firstName%%, %%client.lastName%% are not passed using this. SMS sent when a payment is received. Use %%payment.amount%%, %%payment.currencyCode%%, . Leave blank to disable.",
+            "required": false
+        },
+        {
+            "key": "event_service_suspend",
+            "label": "service.suspend \u2014 Service Suspended",
+            "description": "SMS sent when a client service is suspended. Use %%service.name%%, %%client.firstName%%, %%client.lastName%%. Leave blank to disable.",
+            "required": false
+        },
+        {
+            "key": "event_service_activate",
+            "label": "service.activate \u2014 Service Activated",
+            "description": "SMS sent when a suspended service is reactivated. Leave blank to disable.",
+            "required": false
+        },
+        {
+            "key": "send_0_invoice",
+            "label": "Send $0 Invoice Notifications",
+            "description": "Check this to send SMS notifications for $0 invoices.",
+            "type": "checkbox",
+            "required": false
+        }
     ],
     "menu": [
         {
-            "label": "Hermes",
+            "label": "SMS Inbox",
             "type": "admin",
             "target": "iframe"
         }
@@ -66,5 +103,6 @@
                 "page": "clientwidget"
             }
         }
-    ]
+    ],
+    "supportsWebhookEvents": true
 }

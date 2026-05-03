@@ -2,6 +2,17 @@
 
 declare(strict_types=1);
 
-// main.php is required by UISP for every plugin.
-// This plugin's functionality lives in public.php (the SMS inbox UI + webhook handler).
-// You could add scheduled tasks here in the future, such as automated SMS reminders.
+// main.php is called by UISP for scheduled/background tasks and plugin events.
+// Hermes uses it to handle UISP webhook events for automated SMS notifications.
+
+if (!file_exists(__DIR__ . '/vendor/autoload.php')) {
+    exit;
+}
+
+require_once __DIR__ . '/vendor/autoload.php';
+require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/config.php';
+
+// UISP fires plugin events as POST requests to main.php.
+// Route them to the notifications handler.
+require __DIR__ . '/includes/notifications.php';
