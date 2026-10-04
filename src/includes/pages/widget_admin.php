@@ -21,7 +21,7 @@ foreach ($unread as $msg) {
     if (!isset($grouped[$key])) {
         $grouped[$key] = [
             'phone'    => $msg['from'],
-            'client'   => lookupClient($phoneToClient, $msg['from']),
+            'client'   => $msg['clientId'] ? directoryGetClient((int) $msg['clientId']) : directoryLookupPhone($msg['from']),
             'messages' => [],
         ];
     }

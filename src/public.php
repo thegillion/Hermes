@@ -18,6 +18,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 require_once __DIR__ . '/includes/helpers.php';
 require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/clients.php';
 
 $action = $_GET['action'] ?? '';
 $page   = $_GET['page']   ?? '';
@@ -54,8 +55,10 @@ if (!$user) {
     die('<p style="font-family:sans-serif;color:#dc2626;padding:20px;">Access denied. Please log in to UISP.</p>');
 }
 
-// ─── Load clients / contacts (needed by all authenticated pages) ──────────────
-require_once __DIR__ . '/includes/clients.php';
+// ─── Refresh the client directory cache ───────────────────────────────────────
+// Cheap when the cache is fresh. The widgets get a smaller budget so they stay
+// snappy; any remaining work carries over to the next load.
+directorySync(in_array($page, ['adminwidget', 'clientwidget'], true) ? 1.5 : 4.0);
 
 // ─── Route: widgets ───────────────────────────────────────────────────────────
 if ($page === 'adminwidget') {

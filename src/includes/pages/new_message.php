@@ -20,15 +20,18 @@
         <div class="compose-row">
             <select name="clientId" onchange="onClientPick(this)">
                 <option value="">— Select a client (optional) —</option>
-                <?php foreach ($clients as $c):
+                <?php
+                $preselect = (int) ($_GET['clientId'] ?? 0);
+                foreach (directoryAllClients() as $c):
                     $cId    = (int) $c['id'];
                     $cName  = htmlspecialchars(clientDisplayName($c), ENT_QUOTES);
                     $cPhone = htmlspecialchars(clientFirstPhone($c), ENT_QUOTES);
                 ?>
-                    <option value="<?= $cId ?>" data-phone="<?= $cPhone ?>"><?= $cName ?></option>
+                    <option value="<?= $cId ?>" data-phone="<?= $cPhone ?>" <?= $cId === $preselect ? 'selected' : '' ?>><?= $cName ?><?= $cPhone ? ' — ' . $cPhone : '' ?></option>
                 <?php endforeach; ?>
             </select>
-            <input type="text" name="toNumber" id="toNumber" placeholder="+15551234567" required>
+            <input type="text" name="toNumber" id="toNumber" placeholder="+15551234567" required
+                   value="<?= htmlspecialchars($preselect ? clientFirstPhone(directoryGetClient($preselect) ?? []) : '', ENT_QUOTES) ?>">
         </div>
         <div class="compose-row">
             <textarea name="message" id="newMsg"

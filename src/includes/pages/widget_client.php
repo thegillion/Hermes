@@ -13,9 +13,13 @@ $widgetClientId = isset($widgetQuery['_clientId']) && $widgetQuery['_clientId'] 
 // Fetch the full individual client record — the bulk /clients list does not
 // include contacts/phones, only the single-client endpoint does.
 $widgetClient = null;
-if ($widgetClientId) {
+if ($widgetClientId && ($api = directoryApi())) {
     try {
         $widgetClient = $api->get("clients/{$widgetClientId}");
+        // Keep the shared directory fresh for this client while we have it.
+        if (is_array($widgetClient)) {
+            directoryStoreClient($widgetClient, $widgetClient['contacts'] ?? null);
+        }
     } catch (\Throwable $e) {
         $log->appendLog("[Hermes] Widget could not fetch client {$widgetClientId}: " . $e->getMessage());
     }
@@ -61,11 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['widget_send']) && !$c
 }
 
 // ─── Load thread for this client ─────────────────────────────────────────────
-$threads      = buildThreads($phoneToClient);
-$widgetKey    = last10($widgetPhone);
-$widgetThread = $threads[$widgetKey] ?? null;
-
-$rawMsgs    = $widgetPhone ? getThreadMessages($widgetPhone) : [];
+$rawMsgs    = $widgetPhone ? getRecentThreadMessages($widgetPhone) : [];
 $widgetMsgs = array_map('rowToMsg', $rawMsgs);
 
 

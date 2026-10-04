@@ -32,16 +32,17 @@ function getDb(): PDO {
     $db = new PDO('sqlite:' . DB_FILE);
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $db->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+    $db->setAttribute(PDO::ATTR_TIMEOUT, 10);
 
     // Enable WAL mode for better concurrent read/write performance
     $db->exec('PRAGMA journal_mode = WAL');
     $db->exec('PRAGMA foreign_keys = ON');
 
     // ── Messages table ────────────────────────────────────────────────────────
-    $db->exec('
+    $db->exec("
         CREATE TABLE IF NOT EXISTS messages (
             id          TEXT    PRIMARY KEY,
-            direction   TEXT    NOT NULL CHECK(direction IN ("inbound","outbound")),
+            direction   TEXT    NOT NULL CHECK(direction IN ('inbound','outbound')),
             from_number TEXT    NOT NULL,
             to_number   TEXT    NOT NULL,
             body        TEXT    NOT NULL,
@@ -50,27 +51,89 @@ function getDb(): PDO {
             is_read     INTEGER NOT NULL DEFAULT 0,
             is_auto     INTEGER NOT NULL DEFAULT 0
         )
-    ');
+    ");
+
+    // phone_key = last 10 digits of the conversation partner's number.
+    // Added in 1.4.0 so threads group reliably regardless of number formatting.
+    $cols = array_column($db->query('PRAGMA table_info(messages)')->fetchAll(), 'name');
+    if (!in_array('phone_key', $cols, true)) {
+        $db->exec('ALTER TABLE messages ADD COLUMN phone_key TEXT');
+    }
 
     // Indexes for common queries
     $db->exec('CREATE INDEX IF NOT EXISTS idx_messages_timestamp   ON messages(timestamp DESC)');
-    $db->exec('CREATE INDEX IF NOT EXISTS idx_messages_from        ON messages(from_number)');
-    $db->exec('CREATE INDEX IF NOT EXISTS idx_messages_to          ON messages(to_number)');
     $db->exec('CREATE INDEX IF NOT EXISTS idx_messages_client      ON messages(client_id)');
     $db->exec('CREATE INDEX IF NOT EXISTS idx_messages_read        ON messages(is_read)');
+    $db->exec('CREATE INDEX IF NOT EXISTS idx_messages_phone_key   ON messages(phone_key, timestamp)');
+
+    // ── Client directory cache (see clients.php) ──────────────────────────────
+    $db->exec('
+        CREATE TABLE IF NOT EXISTS clients (
+            id                 INTEGER PRIMARY KEY,
+            name               TEXT    NOT NULL,
+            first_phone        TEXT,
+            contacts_synced_at INTEGER
+        )
+    ');
+    $db->exec('
+        CREATE TABLE IF NOT EXISTS client_phones (
+            phone_key TEXT    NOT NULL,
+            client_id INTEGER NOT NULL,
+            phone     TEXT    NOT NULL,
+            PRIMARY KEY (phone_key, client_id)
+        )
+    ');
+    $db->exec('CREATE INDEX IF NOT EXISTS idx_client_phones_client ON client_phones(client_id)');
+    $db->exec('
+        CREATE TABLE IF NOT EXISTS meta (
+            key   TEXT PRIMARY KEY,
+            value TEXT
+        )
+    ');
+
+    backfillPhoneKeys($db);
 
     return $db;
+}
+
+// Fill phone_key for rows written before 1.4.0 or by the JSON migration.
+function backfillPhoneKeys(PDO $db): void {
+    $rows = $db->query('
+        SELECT id, direction, from_number, to_number FROM messages WHERE phone_key IS NULL
+    ')->fetchAll();
+    if (!$rows) return;
+
+    $st = $db->prepare('UPDATE messages SET phone_key = :key WHERE id = :id');
+    $db->beginTransaction();
+    foreach ($rows as $row) {
+        $partner = $row['direction'] === 'inbound' ? $row['from_number'] : $row['to_number'];
+        $st->execute([':key' => last10($partner), ':id' => $row['id']]);
+    }
+    $db->commit();
+}
+
+function metaGet(string $key): ?string {
+    $st = getDb()->prepare('SELECT value FROM meta WHERE key = :key');
+    $st->execute([':key' => $key]);
+    $value = $st->fetchColumn();
+    return $value === false ? null : (string) $value;
+}
+
+function metaSet(string $key, string $value): void {
+    getDb()->prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (:key, :value)')
+           ->execute([':key' => $key, ':value' => $value]);
 }
 
 // ─── Message CRUD ─────────────────────────────────────────────────────────────
 
 function addMessage(array $msg): void {
-    $db = getDb();
+    $db      = getDb();
+    $partner = $msg['direction'] === 'inbound' ? $msg['from'] : $msg['to'];
     $st = $db->prepare('
         INSERT OR IGNORE INTO messages
-            (id, direction, from_number, to_number, body, timestamp, client_id, is_auto)
+            (id, direction, from_number, to_number, body, timestamp, client_id, is_auto, phone_key)
         VALUES
-            (:id, :direction, :from, :to, :body, :timestamp, :clientId, :auto)
+            (:id, :direction, :from, :to, :body, :timestamp, :clientId, :auto, :phoneKey)
     ');
     $st->execute([
         ':id'        => $msg['id']        ?? generateId(),
@@ -81,96 +144,79 @@ function addMessage(array $msg): void {
         ':timestamp' => $msg['timestamp'] ?? date('c'),
         ':clientId'  => $msg['clientId']  ?? null,
         ':auto'      => ($msg['auto'] ?? false) ? 1 : 0,
+        ':phoneKey'  => last10($partner),
     ]);
 }
 
-function getMessages(int $limit = 2000, int $offset = 0): array {
-    $db = getDb();
-    $st = $db->prepare('
+// Messages are returned oldest-first. Page 1 is the OLDEST page; use
+// getRecentThreadMessages() when you want the latest messages.
+function getThreadMessages(string $phone, int $page = 1): array {
+    $st = getDb()->prepare('
         SELECT * FROM messages
+        WHERE phone_key = :key
         ORDER BY timestamp ASC
         LIMIT :limit OFFSET :offset
     ');
-    $st->execute([':limit' => $limit, ':offset' => $offset]);
+    $st->execute([
+        ':key'    => last10($phone),
+        ':limit'  => PAGE_SIZE,
+        ':offset' => (max(1, $page) - 1) * PAGE_SIZE,
+    ]);
     return $st->fetchAll() ?: [];
 }
 
-function getThreadMessages(string $phone, int $page = 1): array {
-    $db      = getDb();
-    $key     = last10($phone);
-    $offset  = ($page - 1) * PAGE_SIZE;
-
-    // Match on last 10 digits of both from and to columns
-    $st = $db->prepare('
+// The most recent $limit messages in a thread, oldest-first.
+function getRecentThreadMessages(string $phone, int $limit = PAGE_SIZE): array {
+    $st = getDb()->prepare('
         SELECT * FROM (
             SELECT * FROM messages
-            WHERE substr(replace(replace(replace(replace(replace(replace(
-                replace(replace(replace(replace(from_number,
-                "+",""),"-","")," ",""),"(",""),")",""),".",
-                ""),"[",""),"]",""),"x",""),"ext",""), -10) = :key
-            OR substr(replace(replace(replace(replace(replace(replace(
-                replace(replace(replace(replace(to_number,
-                "+",""),"-","")," ",""),"(",""),")",""),".",
-                ""),"[",""),"]",""),"x",""),"ext",""), -10) = :key
-        )
-        ORDER BY timestamp ASC
-        LIMIT :limit OFFSET :offset
+            WHERE phone_key = :key
+            ORDER BY timestamp DESC
+            LIMIT :limit
+        ) ORDER BY timestamp ASC
     ');
-    $st->execute([':key' => $key, ':limit' => PAGE_SIZE, ':offset' => $offset]);
+    $st->execute([':key' => last10($phone), ':limit' => $limit]);
     return $st->fetchAll() ?: [];
 }
 
 function countThreadMessages(string $phone): int {
-    $db  = getDb();
-    $key = last10($phone);
-    $st  = $db->prepare('
-        SELECT COUNT(*) FROM messages
-        WHERE substr(replace(replace(replace(replace(replace(replace(
-            replace(replace(replace(replace(from_number,
-            "+",""),"-","")," ",""),"(",""),")",""),".",
-            ""),"[",""),"]",""),"x",""),"ext",""), -10) = :key
-        OR substr(replace(replace(replace(replace(replace(replace(
-            replace(replace(replace(replace(to_number,
-            "+",""),"-","")," ",""),"(",""),")",""),".",
-            ""),"[",""),"]",""),"x",""),"ext",""), -10) = :key
-    ');
-    $st->execute([':key' => $key]);
+    $st = getDb()->prepare('SELECT COUNT(*) FROM messages WHERE phone_key = :key');
+    $st->execute([':key' => last10($phone)]);
     return (int) $st->fetchColumn();
 }
 
 // ─── Thread building ──────────────────────────────────────────────────────────
 
-function buildThreads(array $phoneToClient): array {
-    $db = getDb();
-
-    // Get the most recent message per conversation partner using a single query
-    $rows = $db->query('
-        SELECT
-            m.*,
-            CASE WHEN m.direction = "inbound" THEN m.from_number ELSE m.to_number END AS partner
+// One entry per conversation partner, newest first, keyed by phone_key.
+// Each thread's client is resolved from the most recent client_id recorded
+// on its messages, falling back to the cached phone → client directory.
+function buildThreads(): array {
+    $rows = getDb()->query('
+        SELECT m.*,
+               CASE WHEN m.direction = \'inbound\' THEN m.from_number ELSE m.to_number END AS partner,
+               (SELECT client_id FROM messages c
+                 WHERE c.phone_key = m.phone_key AND c.client_id IS NOT NULL
+                 ORDER BY c.timestamp DESC LIMIT 1) AS thread_client_id
         FROM messages m
-        INNER JOIN (
-            SELECT
-                CASE WHEN direction = "inbound" THEN from_number ELSE to_number END AS p,
-                MAX(timestamp) AS max_ts
-            FROM messages
-            GROUP BY p
-        ) latest ON
-            (CASE WHEN m.direction = "inbound" THEN m.from_number ELSE m.to_number END) = latest.p
-            AND m.timestamp = latest.max_ts
+        WHERE m.rowid = (
+            SELECT rowid FROM messages x
+            WHERE x.phone_key = m.phone_key
+            ORDER BY x.timestamp DESC, x.rowid DESC
+            LIMIT 1
+        )
         ORDER BY m.timestamp DESC
     ')->fetchAll();
 
     $threads = [];
     foreach ($rows as $row) {
-        $phone = $row['partner'];
-        $key   = last10($phone);
-        if (isset($threads[$key])) continue; // deduplicate
+        $client = $row['thread_client_id'] !== null
+            ? directoryGetClient((int) $row['thread_client_id'])
+            : null;
 
-        $threads[$key] = [
-            'phone'    => $phone,
+        $threads[$row['phone_key']] = [
+            'phone'    => $row['partner'],
             'lastMsg'  => rowToMsg($row),
-            'client'   => lookupClient($phoneToClient, $phone),
+            'client'   => $client ?? directoryLookupPhone($row['partner']),
             'lastTime' => $row['timestamp'],
         ];
     }
@@ -219,15 +265,25 @@ function isUnread(array $msg): bool {
 
 // ─── Client helpers ───────────────────────────────────────────────────────────
 
-function lookupClient(array $map, string $phone): ?array {
-    return $map[last10($phone)] ?? null;
-}
-
+// Works for both UCRM API client records and rows from the clients cache table.
 function clientDisplayName(array $c): string {
-    return trim(($c['firstName'] ?? '') . ' ' . ($c['lastName'] ?? '')) ?: 'Unknown';
+    if (!empty($c['name'])) {
+        return $c['name'];
+    }
+    $person  = trim(($c['firstName'] ?? '') . ' ' . ($c['lastName'] ?? ''));
+    $company = trim($c['companyName'] ?? '');
+    $isCompany = (int) ($c['clientType'] ?? 1) === 2;
+
+    if ($isCompany && $company !== '') return $company;
+    if ($person !== '')                return $person;
+    if ($company !== '')               return $company;
+    return isset($c['id']) ? 'Client #' . $c['id'] : 'Unknown';
 }
 
 function clientFirstPhone(array $c): string {
+    if (!empty($c['first_phone'])) {
+        return $c['first_phone'];
+    }
     foreach (($c['contacts'] ?? []) as $contact) {
         if (!empty($contact['phone'])) {
             return $contact['phone'];

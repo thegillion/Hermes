@@ -85,6 +85,7 @@ if ($from && $body) {
         'to'        => $to,
         'body'      => $body,
         'timestamp' => date('c'),
+        'clientId'  => directoryLookupPhone($from)['id'] ?? null,
     ]);
     $log->appendLog('[Hermes] Incoming SMS from ' . $from . ': ' . mb_strimwidth($body, 0, 80, '…'));
 }

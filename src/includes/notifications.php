@@ -6,7 +6,7 @@ use Twilio\Rest\Client as TwilioClient;
 use Ubnt\UcrmPluginSdk\Service\UcrmApi;
 
 // ─── notifications.php ────────────────────────────────────────────────────────
-// Called from main.php when UISP fires a plugin webhook event.
+// Called from public.php when UISP fires a plugin webhook event.
 // UISP sends the full entity data inside extraData.entity so we don't
 // need to make separate API calls for invoice/payment/service data —
 // we only call the API once to get the client's phone number.
@@ -143,8 +143,17 @@ foreach ($entityData as $key => $value) {
     $tokens['%%' . $entity . '.' . $key . '%%'] = (string) ($value ?? '');
 }
 
-// Also map clientFirstName → %%client.firstName%% etc (invoice payload
-// embeds these directly as clientFirstName, clientLastName etc)
+// Client fields come from the client record we fetched above, so they work
+// for every event (payment payloads don't embed client names).
+foreach ($client as $key => $value) {
+    if (is_scalar($value) || $value === null) {
+        $tokens['%%client.' . $key . '%%'] = (string) ($value ?? '');
+    }
+}
+$tokens['%%client.name%%'] = clientDisplayName($client);
+
+// Invoice payloads also embed clientFirstName etc. — prefer those when present
+// since they reflect the name printed on the invoice.
 $clientFieldMap = [
     'clientFirstName'   => 'firstName',
     'clientLastName'    => 'lastName',

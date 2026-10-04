@@ -3,18 +3,13 @@
 declare(strict_types=1);
 
 // ─── Build threads and determine active conversation ──────────────────────────
-$threads = buildThreads($phoneToClient);
+$threads = buildThreads();
 
 // clientId auto-routing: ?clientId=X jumps straight to that client's thread
 if (isset($_GET['clientId']) && !isset($_GET['phone']) && !isset($_GET['new']) && $action !== 'send') {
     $incomingClientId = (int) $_GET['clientId'];
-    $clientPhone      = '';
-    foreach ($clients as $c) {
-        if ((int) $c['id'] === $incomingClientId) {
-            $clientPhone = clientFirstPhone($c);
-            break;
-        }
-    }
+    $incomingClient   = directoryGetClient($incomingClientId);
+    $clientPhone      = $incomingClient ? clientFirstPhone($incomingClient) : '';
     if ($clientPhone) {
         $digits = last10($clientPhone);
         if (isset($threads[$digits])) {
