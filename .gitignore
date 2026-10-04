@@ -1,2 +1,8 @@
-/vendor/
-/data/messages.json
+vendor/
+
+# Runtime data: Twilio config, message database, logs. Never commit.
+src/data/*
+!src/data/.gitkeep
+
+# Built plugin zips contain data/ and vendor/; publish them as GitHub Releases instead.
+*.zip

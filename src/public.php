@@ -18,6 +18,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 require_once __DIR__ . '/includes/helpers.php';
 require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/clients.php';
 
 $action = $_GET['action'] ?? '';
 $page   = $_GET['page']   ?? '';
@@ -30,6 +31,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== 'webhook') {
     if ($rawBody) {
         $uispEvent = json_decode($rawBody, true);
         if (is_array($uispEvent) && isset($uispEvent['eventName'])) {
+            // Require the shared webhook key once one is configured. Until then,
+            // accept events (notifications.php re-fetches all data from UISP)
+            // but warn so the admin knows to set it.
+            if ($webhookKey === '') {
+                $log->appendLog('[Hermes] Notification: no Webhook Key configured — accepting event unauthenticated. Set one in plugin config.');
+            } elseif (!hash_equals($webhookKey, (string) ($_GET['key'] ?? ''))) {
+                $log->appendLog('[Hermes] Notification: rejected event — missing or wrong webhook key.');
+                http_response_code(403);
+                exit;
+            }
             define('UISP_EVENT_BODY', $rawBody);
             require __DIR__ . '/includes/notifications.php';
             exit;
@@ -54,8 +65,10 @@ if (!$user) {
     die('<p style="font-family:sans-serif;color:#dc2626;padding:20px;">Access denied. Please log in to UISP.</p>');
 }
 
-// ─── Load clients / contacts (needed by all authenticated pages) ──────────────
-require_once __DIR__ . '/includes/clients.php';
+// ─── Refresh the client directory cache ───────────────────────────────────────
+// Cheap when the cache is fresh. The widgets get a smaller budget so they stay
+// snappy; any remaining work carries over to the next load.
+directorySync(in_array($page, ['adminwidget', 'clientwidget'], true) ? 1.5 : 4.0);
 
 // ─── Route: widgets ───────────────────────────────────────────────────────────
 if ($page === 'adminwidget') {

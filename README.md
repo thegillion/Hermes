@@ -36,18 +36,18 @@ README.md
 src/
   manifest.json              Plugin metadata, config fields, menu, and widget registration
   composer.json              PHP dependencies (UCRM Plugin SDK + Twilio SDK)
-  main.php                   UISP background/scheduled task entry point
+  main.php                   Scheduled task — rebuilds the client directory cache
   public.php                 HTTP entry point — routes all requests
   plugin_admin.css           Injects Hermes icon into the UISP sidebar
   .gitignore                 Excludes vendor/ and data/ from git
   data/
     .gitkeep                 Ensures data/ directory exists in the zip
-    hermes.db                Created at runtime — SQLite message database
+    hermes.db                Created at runtime — SQLite messages + client directory cache
     messages.json            Legacy JSON store (kept as backup after migration)
   includes/
     config.php               Constants, services, Twilio credentials, webhook URL
     helpers.php              Phone normalization, SQLite CRUD, thread building
-    clients.php              UCRM API — loads clients and phone → client map
+    clients.php              Client directory — cached phone → client lookup
     ears.php                 Twilio incoming SMS webhook listener
     send.php                 Outbound SMS handler
     notifications.php        UISP event handler — automated SMS notifications
@@ -98,6 +98,7 @@ Go to **System → Plugins → Hermes → Configure** and fill in:
 | **Twilio Account SID** | From your [Twilio Console](https://console.twilio.com) dashboard |
 | **Twilio Auth Token** | From your Twilio Console dashboard |
 | **Twilio From Number** | Your Twilio number in E.164 format e.g. `+15551234567` |
+| **Webhook Key** | A long random string (the SMS Inbox suggests one). Protects the billing notification webhook — see step 6. |
 
 ### 5. Set the Twilio webhook
 
@@ -113,8 +114,14 @@ In the [Twilio Console](https://console.twilio.com):
 
 For automated invoice/payment notifications, go to **System → Webhooks → Endpoints** and add:
 
-- **URL:** `https://your-uisp-domain.com/crm/_plugins/hermes/public.php`
+- **URL:** `https://your-uisp-domain.com/crm/_plugins/hermes/public.php?key=YOUR_WEBHOOK_KEY`
 - **Events:** Invoice - Add, Invoice - Edit, Payment - Add, Service - Suspend, Service - Activate
+
+### 7. Schedule the client directory sync (recommended)
+
+Hermes keeps a cached copy of your client list so it can show the client's name next to each conversation. The cache refreshes itself a little on every inbox load, but on large installs set **System → Plugins → Hermes → Execution period** (e.g. every hour) so `main.php` rebuilds it in the background. You can also click **Execute manually** once after installing to fill it immediately.
+
+> **Security:** this endpoint is public, so Hermes rejects events that don't carry the matching `?key=`. It also never trusts the event body: the invoice, payment or service is re-fetched from UISP, and the recipient and every placeholder value come from that record. Until a Webhook Key is set, events are still accepted and the SMS Inbox shows a warning banner.
 
 > **Note:** On local/private IP installs (10.x, 192.168.x, localhost) Twilio signature validation is automatically skipped. Set the Public URL config field when going live.
 
@@ -130,8 +137,9 @@ Templates support `%%entity.field%%` placeholders pulled directly from the UISP 
 
 | Placeholder | Example output |
 |---|---|
-| `%%client.firstName%%` | John | -- Doesn't work with payment.add as UCRM does not pass it to plugin
-| `%%client.lastName%%` | Smith | -- Doesn't work with payment.add as UCRM does not pass it to plugin
+| `%%client.firstName%%` | John |
+| `%%client.lastName%%` | Smith |
+| `%%client.name%%` | John Smith (or the company name for business clients) |
 | `%%invoice.number%%` | 000042 |
 | `%%invoice.total%%` | 79.99 USD |
 | `%%invoice.dueDate%%` | May 16, 2026 |
@@ -146,7 +154,8 @@ Hi %%client.firstName%%, invoice #%%invoice.number%% for %%invoice.total%% is du
 
 | Placeholder | Example output |
 |---|---|
-| `%%client.firstName%%` | John | -- Doesn't work with payment.add as UCRM does not pass it to plugin
+| `%%client.firstName%%` | John |
+| `%%client.name%%` | John Smith |
 | `%%payment.amount%%` | 79.99 USD |
 | `%%payment.currencyCode%%` | USD |
 
@@ -196,13 +205,27 @@ If you were running a previous version of Hermes that stored messages in `messag
 | Incoming messages not appearing | Verify the Twilio webhook URL ends with `?action=webhook` and your server is publicly accessible |
 | Invalid Twilio signature error | Set the **Public URL** config field to your exact public domain |
 | Automated notifications not firing | Verify UISP webhook endpoint is set to `public.php` (not `main.php`) and the event template field is not blank |
+| Log says "rejected event — missing or wrong webhook key" | The `?key=` on the UISP webhook endpoint URL doesn't match the plugin's **Webhook Key** |
 | `$0` invoice notification sent | Enable or disable the "Send $0 Invoice Notifications" checkbox in config |
+| Conversations show a phone number instead of a client name | The number isn't on any UISP client contact, or the directory cache is still filling — click **Execute manually** on the plugin page and reload |
 | No phone number on client widget | UISP requires a phone number in the client's contact info |
 | Plugin shows wrong version | Re-upload the zip — UISP caches the manifest at upload time |
 
 Plugin errors are written to **System → Plugins → Hermes → Log**.
 
 ---
+
+## Changelog
+
+### 1.4.0
+- **Fixed:** client names now show in the SMS Inbox and dashboard widget, not just the client widget. The old lookup called a UCRM endpoint that doesn't exist and only read the first 500 clients.
+- **Fixed:** business clients show their company name instead of "Unknown".
+- **Fixed:** the client widget showed the *oldest* 50 messages; it now shows the latest 50.
+- **Fixed:** `%%client.*%%` placeholders now work for `payment.add` and every other event.
+- **Security:** the UISP event webhook requires a **Webhook Key** (`?key=` on the endpoint URL), and notification content is always re-fetched from UISP instead of taken from the request, so forged events can't pick the recipient or inject text.
+- Incoming SMS are tagged with the matching client, and older messages are back-filled automatically.
+- Conversations are grouped by a stored phone key, so `+1859…` and `859…` land in the same thread.
+- Source moved into `src/` in git; built zips and runtime data are no longer committed.
 
 ## Contact
 

@@ -5,12 +5,12 @@
         "displayName": "Hermes",
         "description": "Two-way SMS inbox and automated notifications via Twilio, directly from UISP.",
         "url": "",
-        "version": "1.3.4",
+        "version": "1.4.0",
         "unmsVersionCompliancy": {
             "min": "2.1.0",
             "max": null
         },
-        "author": "Your Name"
+        "author": "Kentucky Fi"
     },
     "configuration": [
         {
@@ -38,9 +38,15 @@
             "required": true
         },
         {
+            "key": "webhookKey",
+            "label": "Webhook Key",
+            "description": "A long random string that protects the billing notification webhook. Add it to the UISP webhook endpoint URL as ?key=YOUR_KEY (System \u2192 Webhooks \u2192 Endpoints). Events without the matching key are rejected. Leave blank only while setting up \u2014 the SMS Inbox shows a warning until it is set.",
+            "required": false
+        },
+        {
             "key": "event_invoice_add",
             "label": "invoice.add \u2014 New Invoice",
-            "description": "SMS sent when a new invoice is created. Use %%invoice.number%%, %%invoice.total%%, %%invoice.currencyCode%%, %%invoice.dueDate%%, %%client.firstName%%, %%client.lastName%%. Leave blank to disable.",
+            "description": "SMS sent when a new invoice is created. Use %%invoice.number%%, %%invoice.total%%, %%invoice.currencyCode%%, %%invoice.dueDate%%, %%client.firstName%%, %%client.lastName%%, %%client.name%% (company name for business clients). Leave blank to disable.",
             "required": false
         },
         {
@@ -58,7 +64,7 @@
         {
             "key": "event_payment_add",
             "label": "payment.add \u2014 Payment Received",
-            "description": "NOTE: %%client.firstName%%, %%client.lastName%% are not passed using this. SMS sent when a payment is received. Use %%payment.amount%%, %%payment.currencyCode%%, . Leave blank to disable.",
+            "description": "SMS sent when a payment is received. Use %%payment.amount%%, %%payment.currencyCode%%, %%client.firstName%%, %%client.lastName%%, %%client.name%%. Leave blank to disable.",
             "required": false
         },
         {
