@@ -231,14 +231,16 @@ Plugin errors are written to **System → Plugins → Hermes → Log**.
 
 ## Changelog
 
+### 1.5.0
+- Optional Discord alerts for every incoming SMS (client name, message, link to the client in UISP). Customer texts can't ping `@everyone` or roles.
+- Optional Discord reminder that pings `@here` or a role when a text has gone N minutes without a reply or being marked read — once per conversation, never for texts from before the feature was turned on.
+
 ### 1.4.0
 - **Fixed:** client names now show in the SMS Inbox and dashboard widget, not just the client widget. The old lookup called a UCRM endpoint that doesn't exist and only read the first 500 clients.
 - **Fixed:** business clients show their company name instead of "Unknown".
 - **Fixed:** the client widget showed the *oldest* 50 messages; it now shows the latest 50.
 - **Fixed:** `%%client.*%%` placeholders now work for `payment.add` and every other event.
 - **Security:** the UISP event webhook requires a **Webhook Key** (`?key=` on the endpoint URL), and notification content is always re-fetched from UISP instead of taken from the request, so forged events can't pick the recipient or inject text.
-- **New:** optional Discord alerts for every incoming SMS (client name, message, link to the client in UISP). Customer texts can't ping `@everyone` or roles.
-- **New:** optional Discord reminder that pings `@here` or a role when a text has gone N minutes without a reply or being marked read — once per conversation, never for texts from before the feature was turned on.
 - Incoming SMS are tagged with the matching client, and older messages are back-filled automatically.
 - Conversations are grouped by a stored phone key, so `+1859…` and `859…` land in the same thread.
 - Source moved into `src/` in git; built zips and runtime data are no longer committed.
