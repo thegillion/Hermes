@@ -231,6 +231,9 @@ Plugin errors are written to **System → Plugins → Hermes → Log**.
 
 ## Changelog
 
+### 1.5.1
+- **Fixed:** messages linked to a client that was later deleted in UISP no longer trigger a "could not fetch client" API call and log line on every inbox load. Deleted clients are remembered and re-checked once a day; those conversations use the phone number lookup instead.
+
 ### 1.5.0
 - Optional Discord alerts for every incoming SMS (client name, message, link to the client in UISP). Customer texts can't ping `@everyone` or roles.
 - Optional Discord reminder that pings `@here` or a role when a text has gone N minutes without a reply or being marked read — once per conversation, never for texts from before the feature was turned on.

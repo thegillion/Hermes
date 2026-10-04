@@ -94,6 +94,14 @@ function getDb(): PDO {
             value TEXT
         )
     ');
+    // Client ids that UISP reported as not found (deleted), so pages don't
+    // re-request them on every load. Re-checked after DIRECTORY_MISSING_TTL.
+    $db->exec('
+        CREATE TABLE IF NOT EXISTS missing_clients (
+            id         INTEGER PRIMARY KEY,
+            checked_at INTEGER NOT NULL
+        )
+    ');
 
     backfillPhoneKeys($db);
 
