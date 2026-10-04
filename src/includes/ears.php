@@ -104,7 +104,7 @@ if (function_exists('fastcgi_finish_request')) {
 }
 
 if ($isNew) {
-    require_once __DIR__ . '/discord.php';
     discordNotifyInbound($config, $from, $body, $client);
 }
+discordCheckReminders($config);
 exit;

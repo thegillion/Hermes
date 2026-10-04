@@ -59,6 +59,10 @@ function getDb(): PDO {
     if (!in_array('phone_key', $cols, true)) {
         $db->exec('ALTER TABLE messages ADD COLUMN phone_key TEXT');
     }
+    // reminded = 1 once a Discord "no reply yet" ping covered this message.
+    if (!in_array('reminded', $cols, true)) {
+        $db->exec('ALTER TABLE messages ADD COLUMN reminded INTEGER NOT NULL DEFAULT 0');
+    }
 
     // Indexes for common queries
     $db->exec('CREATE INDEX IF NOT EXISTS idx_messages_timestamp   ON messages(timestamp DESC)');

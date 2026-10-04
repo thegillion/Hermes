@@ -19,6 +19,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/includes/helpers.php';
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/clients.php';
+require_once __DIR__ . '/includes/discord.php';
 
 $action = $_GET['action'] ?? '';
 $page   = $_GET['page']   ?? '';
@@ -69,6 +70,7 @@ if (!$user) {
 // Cheap when the cache is fresh. The widgets get a smaller budget so they stay
 // snappy; any remaining work carries over to the next load.
 directorySync(in_array($page, ['adminwidget', 'clientwidget'], true) ? 1.5 : 4.0);
+discordCheckReminders($config);
 
 // ─── Route: widgets ───────────────────────────────────────────────────────────
 if ($page === 'adminwidget') {

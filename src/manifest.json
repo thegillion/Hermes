@@ -50,6 +50,18 @@
             "required": false
         },
         {
+            "key": "discordReminderMinutes",
+            "label": "Discord Reminder (minutes)",
+            "description": "Optional. If an incoming SMS gets no reply and isn't marked read within this many minutes, ping the Discord channel once for that conversation, e.g. 5. Requires the Discord Webhook URL and a short plugin Execution period. Leave blank to disable.",
+            "required": false
+        },
+        {
+            "key": "discordReminderMention",
+            "label": "Discord Reminder Ping",
+            "description": "Who the reminder pings: @here (default), @everyone, or a role as <@&ROLE_ID> (Discord: enable Developer Mode, right-click the role \u2192 Copy Role ID).",
+            "required": false
+        },
+        {
             "key": "event_invoice_add",
             "label": "invoice.add \u2014 New Invoice",
             "description": "SMS sent when a new invoice is created. Use %%invoice.number%%, %%invoice.total%%, %%invoice.currencyCode%%, %%invoice.dueDate%%, %%client.firstName%%, %%client.lastName%%, %%client.name%% (company name for business clients). Leave blank to disable.",
