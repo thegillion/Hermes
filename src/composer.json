@@ -1,0 +1,9 @@
+{
+    "require": {
+        "ubnt/ucrm-plugin-sdk": "*",
+        "twilio/sdk": "^8.0"
+    },
+    "config": {
+        "optimize-autoloader": true
+    }
+}
