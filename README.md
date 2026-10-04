@@ -16,6 +16,7 @@ Hermes adds a full SMS inbox to your UISP admin panel, embeds a conversation wid
 - **SQLite storage** — fast, reliable message history with no file locking issues
 - **JSON migration tool** — built-in page to migrate from the old `messages.json` format
 - **Twilio signature validation** — webhook requests verified as genuine Twilio calls (skipped automatically on private/local IP installs)
+- **Discord alerts** — every incoming SMS is also posted to a Discord channel so nothing gets missed
 - **Auto-notification tagging** — automated messages shown with a ⚡ tag in the inbox and client widget
 
 ---
@@ -51,6 +52,7 @@ src/
     ears.php                 Twilio incoming SMS webhook listener
     send.php                 Outbound SMS handler
     notifications.php        UISP event handler — automated SMS notifications
+    discord.php              Posts incoming SMS to a Discord webhook
     migrate.php              One-time migration page from messages.json to SQLite
     pages/
       inbox.php              Main SMS inbox UI (sidebar + chat layout)
@@ -98,6 +100,7 @@ Go to **System → Plugins → Hermes → Configure** and fill in:
 | **Twilio Account SID** | From your [Twilio Console](https://console.twilio.com) dashboard |
 | **Twilio Auth Token** | From your Twilio Console dashboard |
 | **Twilio From Number** | Your Twilio number in E.164 format e.g. `+15551234567` |
+| **Discord Webhook URL** | Optional. Posts every incoming SMS to a Discord channel. In Discord: **Server Settings → Integrations → Webhooks → New Webhook → Copy Webhook URL**. |
 | **Webhook Key** | A long random string (the SMS Inbox suggests one). Protects the billing notification webhook — see step 6. |
 
 ### 5. Set the Twilio webhook
@@ -206,6 +209,7 @@ If you were running a previous version of Hermes that stored messages in `messag
 | Invalid Twilio signature error | Set the **Public URL** config field to your exact public domain |
 | Automated notifications not firing | Verify UISP webhook endpoint is set to `public.php` (not `main.php`) and the event template field is not blank |
 | Log says "rejected event — missing or wrong webhook key" | The `?key=` on the UISP webhook endpoint URL doesn't match the plugin's **Webhook Key** |
+| Incoming texts not showing in Discord | Check the plugin log for "Discord:" lines. The URL must be a full `https://discord.com/api/webhooks/…` link. |
 | `$0` invoice notification sent | Enable or disable the "Send $0 Invoice Notifications" checkbox in config |
 | Conversations show a phone number instead of a client name | The number isn't on any UISP client contact, or the directory cache is still filling — click **Execute manually** on the plugin page and reload |
 | No phone number on client widget | UISP requires a phone number in the client's contact info |
@@ -223,6 +227,7 @@ Plugin errors are written to **System → Plugins → Hermes → Log**.
 - **Fixed:** the client widget showed the *oldest* 50 messages; it now shows the latest 50.
 - **Fixed:** `%%client.*%%` placeholders now work for `payment.add` and every other event.
 - **Security:** the UISP event webhook requires a **Webhook Key** (`?key=` on the endpoint URL), and notification content is always re-fetched from UISP instead of taken from the request, so forged events can't pick the recipient or inject text.
+- **New:** optional Discord alerts for every incoming SMS (client name, message, link to the client in UISP). Customer texts can't ping `@everyone` or roles.
 - Incoming SMS are tagged with the matching client, and older messages are back-filled automatically.
 - Conversations are grouped by a stored phone key, so `+1859…` and `859…` land in the same thread.
 - Source moved into `src/` in git; built zips and runtime data are no longer committed.

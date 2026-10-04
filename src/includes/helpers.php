@@ -126,7 +126,8 @@ function metaSet(string $key, string $value): void {
 
 // ─── Message CRUD ─────────────────────────────────────────────────────────────
 
-function addMessage(array $msg): void {
+// Returns false when the message id already exists (e.g. a Twilio retry).
+function addMessage(array $msg): bool {
     $db      = getDb();
     $partner = $msg['direction'] === 'inbound' ? $msg['from'] : $msg['to'];
     $st = $db->prepare('
@@ -146,6 +147,7 @@ function addMessage(array $msg): void {
         ':auto'      => ($msg['auto'] ?? false) ? 1 : 0,
         ':phoneKey'  => last10($partner),
     ]);
+    return $st->rowCount() > 0;
 }
 
 // Messages are returned oldest-first. Page 1 is the OLDEST page; use

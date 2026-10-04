@@ -77,15 +77,19 @@ $to   = $_POST['To']   ?? '';
 $body = $_POST['Body'] ?? '';
 $sid  = $_POST['MessageSid'] ?? generateId();
 
+$isNew  = false;
+$client = null;
+
 if ($from && $body) {
-    addMessage([
+    $client = directoryLookupPhone($from);
+    $isNew  = addMessage([
         'id'        => $sid,
         'direction' => 'inbound',
         'from'      => $from,
         'to'        => $to,
         'body'      => $body,
         'timestamp' => date('c'),
-        'clientId'  => directoryLookupPhone($from)['id'] ?? null,
+        'clientId'  => $client['id'] ?? null,
     ]);
     $log->appendLog('[Hermes] Incoming SMS from ' . $from . ': ' . mb_strimwidth($body, 0, 80, '…'));
 }
@@ -93,4 +97,14 @@ if ($from && $body) {
 // Respond with empty TwiML — no auto-reply
 header('Content-Type: text/xml');
 echo '<Response></Response>';
+
+// Answer Twilio before talking to Discord so a slow Discord can't delay it.
+if (function_exists('fastcgi_finish_request')) {
+    fastcgi_finish_request();
+}
+
+if ($isNew) {
+    require_once __DIR__ . '/discord.php';
+    discordNotifyInbound($config, $from, $body, $client);
+}
 exit;
