@@ -25,6 +25,9 @@ $fromNumber = trim($config['twilioFromNumber']  ?? '');
 
 $configMissing = !$accountSid || !$authToken || !$fromNumber;
 
+// Shared secret UISP must send as ?key= on the event webhook URL.
+$webhookKey = trim((string) ($config['webhookKey'] ?? ''));
+
 // ─── Canonical webhook URL ────────────────────────────────────────────────────
 // Priority order:
 //   1. Admin-configured Public URL (most reliable — bypasses proxy header issues)

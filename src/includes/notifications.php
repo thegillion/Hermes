@@ -7,11 +7,22 @@ use Ubnt\UcrmPluginSdk\Service\UcrmApi;
 
 // ─── notifications.php ────────────────────────────────────────────────────────
 // Called from public.php when UISP fires a plugin webhook event.
-// UISP sends the full entity data inside extraData.entity so we don't
-// need to make separate API calls for invoice/payment/service data —
-// we only call the API once to get the client's phone number.
+//
+// This endpoint is public, so the payload is treated only as a signal that
+// something happened to invoice/payment/service #N. Everything the SMS uses —
+// who it goes to and every %%placeholder%% value — is re-fetched from the UCRM
+// API. A forged event therefore can't choose the recipient or inject text;
+// public.php additionally requires the webhook key when one is configured.
 
-$log->appendLog('[Hermes] Notification: main.php triggered.');
+// eventName → [API endpoint for the entity, entity name used in placeholders]
+const NOTIFICATION_EVENTS = [
+    'invoice.add'      => ['invoices',        'invoice'],
+    'invoice.overdue'  => ['invoices',        'invoice'],
+    'invoice.near_due' => ['invoices',        'invoice'],
+    'payment.add'      => ['payments',        'payment'],
+    'service.suspend'  => ['clients/services', 'service'],
+    'service.activate' => ['clients/services', 'service'],
+];
 
 // ─── Read payload ─────────────────────────────────────────────────────────────
 // Body may be pre-read in public.php to detect the event type
@@ -29,19 +40,23 @@ if (!is_array($payload)) {
     exit;
 }
 
-$eventName  = $payload['eventName']  ?? '';
-$changeType = $payload['changeType'] ?? '';
-$entity     = $payload['entity']     ?? '';
+$eventName  = (string) ($payload['eventName']  ?? '');
+$changeType = (string) ($payload['changeType'] ?? '');
 $entityId   = (int) ($payload['entityId'] ?? 0);
-$entityData = $payload['extraData']['entity'] ?? [];
 
-$log->appendLog("[Hermes] Notification: event={$eventName} entity={$entity} id={$entityId}");
+$log->appendLog("[Hermes] Notification: event={$eventName} id={$entityId}");
 
 // Ignore UISP test pings
 if ($changeType === 'test') {
     $log->appendLog('[Hermes] Notification: test ping received — OK.');
     exit;
 }
+
+if (!isset(NOTIFICATION_EVENTS[$eventName])) {
+    $log->appendLog("[Hermes] Notification: '{$eventName}' is not a supported event — skipping.");
+    exit;
+}
+[$endpoint, $entity] = NOTIFICATION_EVENTS[$eventName];
 
 // ─── Check if this event has a message template configured ────────────────────
 $configKey = 'event_' . str_replace('.', '_', $eventName);
@@ -52,16 +67,30 @@ if (!$template) {
     exit;
 }
 
-if (!$entityId || empty($entityData)) {
-    $log->appendLog("[Hermes] Notification: missing entity data for event '{$eventName}'.");
+if (!$entityId) {
+    $log->appendLog("[Hermes] Notification: missing entity id for event '{$eventName}'.");
     exit;
 }
 
-// ─── Get clientId from entity data ───────────────────────────────────────────
+// ─── Fetch the real entity from UISP ─────────────────────────────────────────
+try {
+    $api        = UcrmApi::create();
+    $entityData = $api->get("{$endpoint}/{$entityId}");
+} catch (\Throwable $e) {
+    $log->appendLog("[Hermes] Notification: could not fetch {$entity} {$entityId} — " . $e->getMessage());
+    exit;
+}
+
+if (!is_array($entityData) || (int) ($entityData['id'] ?? 0) !== $entityId) {
+    $log->appendLog("[Hermes] Notification: {$entity} {$entityId} not found in UISP — skipping.");
+    exit;
+}
+
+// ─── Get clientId from the fetched entity ────────────────────────────────────
 $clientId = (int) ($entityData['clientId'] ?? 0);
 
 if (!$clientId) {
-    $log->appendLog("[Hermes] Notification: no clientId found in entity data.");
+    $log->appendLog("[Hermes] Notification: {$entity} {$entityId} has no clientId.");
     exit;
 }
 
@@ -75,10 +104,7 @@ if ($entity === 'invoice') {
 }
 
 // ─── Fetch client phone number from API ──────────────────────────────────────
-// The webhook payload doesn't include contact phone numbers so we
-// need one API call to get them.
 try {
-    $api    = UcrmApi::create();
     $client = $api->get("clients/{$clientId}");
 } catch (\Throwable $e) {
     $log->appendLog("[Hermes] Notification: could not fetch client {$clientId} — " . $e->getMessage());
@@ -123,9 +149,8 @@ if (!$toNumber) {
 }
 
 // ─── Build message from template ─────────────────────────────────────────────
-// Replace %%entity.field%% placeholders with values from the entity data.
-// Also support %%client.firstName%% etc from the entity data directly
-// (UISP embeds clientFirstName, clientLastName etc in invoice payloads).
+// Replace %%entity.field%% placeholders with values from the fetched entity
+// and %%client.field%% placeholders with values from the fetched client.
 $tokens = [];
 
 // Map entity fields → %%entity.field%%
@@ -152,7 +177,7 @@ foreach ($client as $key => $value) {
 }
 $tokens['%%client.name%%'] = clientDisplayName($client);
 
-// Invoice payloads also embed clientFirstName etc. — prefer those when present
+// Invoices also carry clientFirstName etc. — prefer those when present
 // since they reflect the name printed on the invoice.
 $clientFieldMap = [
     'clientFirstName'   => 'firstName',

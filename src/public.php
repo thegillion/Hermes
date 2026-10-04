@@ -31,6 +31,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== 'webhook') {
     if ($rawBody) {
         $uispEvent = json_decode($rawBody, true);
         if (is_array($uispEvent) && isset($uispEvent['eventName'])) {
+            // Require the shared webhook key once one is configured. Until then,
+            // accept events (notifications.php re-fetches all data from UISP)
+            // but warn so the admin knows to set it.
+            if ($webhookKey === '') {
+                $log->appendLog('[Hermes] Notification: no Webhook Key configured — accepting event unauthenticated. Set one in plugin config.');
+            } elseif (!hash_equals($webhookKey, (string) ($_GET['key'] ?? ''))) {
+                $log->appendLog('[Hermes] Notification: rejected event — missing or wrong webhook key.');
+                http_response_code(403);
+                exit;
+            }
             define('UISP_EVENT_BODY', $rawBody);
             require __DIR__ . '/includes/notifications.php';
             exit;

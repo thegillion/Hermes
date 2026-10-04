@@ -197,6 +197,25 @@ if ($activeThread) {
     </div>
 <?php endif; ?>
 
+<?php if ($webhookKey === ''):
+    $suggestedKey = bin2hex(random_bytes(16));
+    $eventBase    = (string) strtok($webhookUrl, '?');
+    if (!preg_match('#^https?://#', $eventBase)) {
+        $eventBase = 'https://your-uisp-domain.com/crm/_plugins/hermes/public.php';
+    }
+    $eventUrl     = $eventBase . '?key=' . $suggestedKey;
+?>
+    <div class="banner warn">
+        🔑 <span>
+            Billing notifications are accepting unauthenticated webhook events. Set
+            <strong>Webhook Key</strong> in <strong>System → Plugins → Hermes → Configure</strong>
+            (e.g. <code><?= htmlspecialchars($suggestedKey, ENT_QUOTES) ?></code>), then change the endpoint in
+            <strong>System → Webhooks → Endpoints</strong> to
+            <code><?= htmlspecialchars($eventUrl, ENT_QUOTES) ?></code>
+        </span>
+    </div>
+<?php endif; ?>
+
 <?php
 // Show migration banner if messages.json exists and hasn't been migrated yet
 $legacyFile = DATA_DIR . '/messages.json';
