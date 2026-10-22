@@ -24,6 +24,7 @@ use Ubnt\UcrmPluginSdk\Service\UcrmApi;
 const DIRECTORY_LIST_TTL     = 900;    // re-list clients every 15 minutes
 const DIRECTORY_CONTACTS_TTL = 86400;  // re-fetch each client's contacts daily
 const DIRECTORY_PAGE_SIZE    = 500;
+const DIRECTORY_MISSING_TTL  = 86400;  // re-check deleted client ids daily
 
 function directoryApi(): ?UcrmApi {
     static $api = false;
@@ -192,20 +193,36 @@ function directoryGetClient(int $clientId): ?array {
     $st->execute([':id' => $clientId]);
     $row = $st->fetch() ?: null;
 
-    if (!$row && ($api = directoryApi())) {
+    if (!$row && !directoryKnownMissing($clientId) && ($api = directoryApi())) {
         try {
             $client = $api->get("clients/{$clientId}");
             if (is_array($client) && !empty($client['id'])) {
                 directoryStoreClient($client, $client['contacts'] ?? null);
+                getDb()->prepare('DELETE FROM missing_clients WHERE id = :id')->execute([':id' => $clientId]);
                 $st->execute([':id' => $clientId]);
                 $row = $st->fetch() ?: null;
             }
         } catch (\Throwable $e) {
-            directoryLog("could not fetch client {$clientId} — " . $e->getMessage());
+            if ($e->getCode() === 404) {
+                // Client was deleted in UISP. Remember that so we don't ask again
+                // on every page load; callers fall back to the phone lookup.
+                getDb()->prepare('INSERT OR REPLACE INTO missing_clients (id, checked_at) VALUES (:id, :t)')
+                       ->execute([':id' => $clientId, ':t' => time()]);
+                directoryLog("client {$clientId} no longer exists in UISP — using phone lookup for its messages.");
+            } else {
+                directoryLog("could not fetch client {$clientId} — " . $e->getMessage());
+            }
         }
     }
 
     return $memo[$clientId] = $row;
+}
+
+function directoryKnownMissing(int $clientId): bool {
+    $st = getDb()->prepare('SELECT checked_at FROM missing_clients WHERE id = :id');
+    $st->execute([':id' => $clientId]);
+    $checkedAt = $st->fetchColumn();
+    return $checkedAt !== false && time() - (int) $checkedAt < DIRECTORY_MISSING_TTL;
 }
 
 // All cached clients, sorted by name, for the New Message picker.

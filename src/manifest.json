@@ -5,7 +5,7 @@
         "displayName": "Hermes",
         "description": "Two-way SMS inbox and automated notifications via Twilio, directly from UISP.",
         "url": "",
-        "version": "1.4.0",
+        "version": "1.5.1",
         "unmsVersionCompliancy": {
             "min": "2.1.0",
             "max": null
@@ -41,6 +41,24 @@
             "key": "webhookKey",
             "label": "Webhook Key",
             "description": "A long random string that protects the billing notification webhook. Add it to the UISP webhook endpoint URL as ?key=YOUR_KEY (System \u2192 Webhooks \u2192 Endpoints). Events without the matching key are rejected. Leave blank only while setting up \u2014 the SMS Inbox shows a warning until it is set.",
+            "required": false
+        },
+        {
+            "key": "discordWebhookUrl",
+            "label": "Discord Webhook URL",
+            "description": "Optional. Every incoming SMS is also posted to this Discord channel so no text goes unnoticed. In Discord: Server Settings \u2192 Integrations \u2192 Webhooks \u2192 New Webhook \u2192 Copy Webhook URL. Leave blank to disable.",
+            "required": false
+        },
+        {
+            "key": "discordReminderMinutes",
+            "label": "Discord Reminder (minutes)",
+            "description": "Optional. If an incoming SMS gets no reply and isn't marked read within this many minutes, ping the Discord channel once for that conversation, e.g. 5. Requires the Discord Webhook URL and a short plugin Execution period. Leave blank to disable.",
+            "required": false
+        },
+        {
+            "key": "discordReminderMention",
+            "label": "Discord Reminder Ping",
+            "description": "Who the reminder pings: @here (default), @everyone, or a role as <@&ROLE_ID> (Discord: enable Developer Mode, right-click the role \u2192 Copy Role ID).",
             "required": false
         },
         {

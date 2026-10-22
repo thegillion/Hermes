@@ -16,6 +16,8 @@ Hermes adds a full SMS inbox to your UISP admin panel, embeds a conversation wid
 - **SQLite storage** — fast, reliable message history with no file locking issues
 - **JSON migration tool** — built-in page to migrate from the old `messages.json` format
 - **Twilio signature validation** — webhook requests verified as genuine Twilio calls (skipped automatically on private/local IP installs)
+- **Discord alerts** — every incoming SMS is also posted to a Discord channel so nothing gets missed
+- **Unanswered-text reminders** — pings the Discord channel if a text gets no reply within N minutes
 - **Auto-notification tagging** — automated messages shown with a ⚡ tag in the inbox and client widget
 
 ---
@@ -51,6 +53,7 @@ src/
     ears.php                 Twilio incoming SMS webhook listener
     send.php                 Outbound SMS handler
     notifications.php        UISP event handler — automated SMS notifications
+    discord.php              Posts incoming SMS to a Discord webhook
     migrate.php              One-time migration page from messages.json to SQLite
     pages/
       inbox.php              Main SMS inbox UI (sidebar + chat layout)
@@ -98,6 +101,9 @@ Go to **System → Plugins → Hermes → Configure** and fill in:
 | **Twilio Account SID** | From your [Twilio Console](https://console.twilio.com) dashboard |
 | **Twilio Auth Token** | From your Twilio Console dashboard |
 | **Twilio From Number** | Your Twilio number in E.164 format e.g. `+15551234567` |
+| **Discord Webhook URL** | Optional. Posts every incoming SMS to a Discord channel. In Discord: **Server Settings → Integrations → Webhooks → New Webhook → Copy Webhook URL**. |
+| **Discord Reminder (minutes)** | Optional, e.g. `5`. If an incoming text has no reply and isn't marked read after this long, Hermes pings the channel once for that conversation. |
+| **Discord Reminder Ping** | `@here` (default), `@everyone`, or a role as `<@&ROLE_ID>` (Discord Developer Mode → right-click role → Copy Role ID). |
 | **Webhook Key** | A long random string (the SMS Inbox suggests one). Protects the billing notification webhook — see step 6. |
 
 ### 5. Set the Twilio webhook
@@ -117,9 +123,14 @@ For automated invoice/payment notifications, go to **System → Webhooks → End
 - **URL:** `https://your-uisp-domain.com/crm/_plugins/hermes/public.php?key=YOUR_WEBHOOK_KEY`
 - **Events:** Invoice - Add, Invoice - Edit, Payment - Add, Service - Suspend, Service - Activate
 
-### 7. Schedule the client directory sync (recommended)
+### 7. Set the plugin execution period (recommended)
 
-Hermes keeps a cached copy of your client list so it can show the client's name next to each conversation. The cache refreshes itself a little on every inbox load, but on large installs set **System → Plugins → Hermes → Execution period** (e.g. every hour) so `main.php` rebuilds it in the background. You can also click **Execute manually** once after installing to fill it immediately.
+Set **System → Plugins → Hermes → Execution period** so `main.php` runs in the background. Each run:
+
+- sends any due Discord **reply reminders** — use the shortest period UISP offers if reminders are on, since a reminder goes out at the next run after the timer expires (any open Hermes page also checks, every 10–60 seconds)
+- refreshes the cached client directory used to show client names (only when it's due — at most every 15 minutes)
+
+Click **Execute manually** once after installing to fill the client directory immediately.
 
 > **Security:** this endpoint is public, so Hermes rejects events that don't carry the matching `?key=`. It also never trusts the event body: the invoice, payment or service is re-fetched from UISP, and the recipient and every placeholder value come from that record. Until a Webhook Key is set, events are still accepted and the SMS Inbox shows a warning banner.
 
@@ -206,6 +217,9 @@ If you were running a previous version of Hermes that stored messages in `messag
 | Invalid Twilio signature error | Set the **Public URL** config field to your exact public domain |
 | Automated notifications not firing | Verify UISP webhook endpoint is set to `public.php` (not `main.php`) and the event template field is not blank |
 | Log says "rejected event — missing or wrong webhook key" | The `?key=` on the UISP webhook endpoint URL doesn't match the plugin's **Webhook Key** |
+| Reminder pings arrive late | They go out on the next plugin run after the timer expires — shorten the **Execution period** |
+| Reminder pings don't notify anyone | Check **Discord Reminder Ping**; a role must be written `<@&ROLE_ID>` and the role must allow mentions |
+| Incoming texts not showing in Discord | Check the plugin log for "Discord:" lines. The URL must be a full `https://discord.com/api/webhooks/…` link. |
 | `$0` invoice notification sent | Enable or disable the "Send $0 Invoice Notifications" checkbox in config |
 | Conversations show a phone number instead of a client name | The number isn't on any UISP client contact, or the directory cache is still filling — click **Execute manually** on the plugin page and reload |
 | No phone number on client widget | UISP requires a phone number in the client's contact info |
@@ -216,6 +230,13 @@ Plugin errors are written to **System → Plugins → Hermes → Log**.
 ---
 
 ## Changelog
+
+### 1.5.1
+- **Fixed:** messages linked to a client that was later deleted in UISP no longer trigger a "could not fetch client" API call and log line on every inbox load. Deleted clients are remembered and re-checked once a day; those conversations use the phone number lookup instead.
+
+### 1.5.0
+- Optional Discord alerts for every incoming SMS (client name, message, link to the client in UISP). Customer texts can't ping `@everyone` or roles.
+- Optional Discord reminder that pings `@here` or a role when a text has gone N minutes without a reply or being marked read — once per conversation, never for texts from before the feature was turned on.
 
 ### 1.4.0
 - **Fixed:** client names now show in the SMS Inbox and dashboard widget, not just the client widget. The old lookup called a UCRM endpoint that doesn't exist and only read the first 500 clients.

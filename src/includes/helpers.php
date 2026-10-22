@@ -59,6 +59,10 @@ function getDb(): PDO {
     if (!in_array('phone_key', $cols, true)) {
         $db->exec('ALTER TABLE messages ADD COLUMN phone_key TEXT');
     }
+    // reminded = 1 once a Discord "no reply yet" ping covered this message.
+    if (!in_array('reminded', $cols, true)) {
+        $db->exec('ALTER TABLE messages ADD COLUMN reminded INTEGER NOT NULL DEFAULT 0');
+    }
 
     // Indexes for common queries
     $db->exec('CREATE INDEX IF NOT EXISTS idx_messages_timestamp   ON messages(timestamp DESC)');
@@ -88,6 +92,14 @@ function getDb(): PDO {
         CREATE TABLE IF NOT EXISTS meta (
             key   TEXT PRIMARY KEY,
             value TEXT
+        )
+    ');
+    // Client ids that UISP reported as not found (deleted), so pages don't
+    // re-request them on every load. Re-checked after DIRECTORY_MISSING_TTL.
+    $db->exec('
+        CREATE TABLE IF NOT EXISTS missing_clients (
+            id         INTEGER PRIMARY KEY,
+            checked_at INTEGER NOT NULL
         )
     ');
 
@@ -126,7 +138,8 @@ function metaSet(string $key, string $value): void {
 
 // ─── Message CRUD ─────────────────────────────────────────────────────────────
 
-function addMessage(array $msg): void {
+// Returns false when the message id already exists (e.g. a Twilio retry).
+function addMessage(array $msg): bool {
     $db      = getDb();
     $partner = $msg['direction'] === 'inbound' ? $msg['from'] : $msg['to'];
     $st = $db->prepare('
@@ -146,6 +159,7 @@ function addMessage(array $msg): void {
         ':auto'      => ($msg['auto'] ?? false) ? 1 : 0,
         ':phoneKey'  => last10($partner),
     ]);
+    return $st->rowCount() > 0;
 }
 
 // Messages are returned oldest-first. Page 1 is the OLDEST page; use
